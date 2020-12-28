@@ -79,10 +79,7 @@ $ tar -xvf android-studio.tar.gz
 ```
 5. You now have Android Studio installed, all that is left is to configure Projector, making sure to select the port that was chosen as the custom TCP rule for the VM (step 1.6) - here we're using port 8888
 ```
-$ projector config add
-Enter a new configuration name: AndroidStudio
-Do you want to choose a Projector-installed IDE? [y/n]: n
-Enter the path to IDE: /path/to/your/android-studio
+$ projector config add AndroidStudio /path/to/your/android-studio
 Enter a desired Projector port (press ENTER for default) [10005]: 8888
 ```
 6. This will start Android Studio with Projector on port 8888. Next time you want to start it, you can just run:
