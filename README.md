@@ -66,21 +66,22 @@ projector --help
 ```
 3. At this point, you could run one of the pre-configured IDEs like IntelliJ and start using it, but to run Android Studio, you need to install it separately.
 4. Download the latest Android Studio 4.2 or above (4.2 is the minimum version that works with Projector)
-* Find the latest download URL for linux from https://developer.android.com/studio/archive. At the time of writing, the latest version is 4.2 Canary 16
+* Find the latest download URL for linux from https://developer.android.com/studio/archive. At the time of writing, the latest version is Artic Fox Beta 3
 * Download it to your remote server in your home directory with curl: 
 
 ```
-$ curl -L --output android-studio.tar.gz https://redirector.gvt1.com/edgedl/android/studio/ide-zips/4.2.0.16/android-studio-ide-202.6939830-linux.tar.gz
+$ curl -L --output android-studio.tar.gz https://redirector.gvt1.com/edgedl/android/studio/ide-zips/2020.3.1.18/android-studio-2020.3.1.18-linux.tar.gz
 ```
 * Unzip the downloaded archive:
 
 ```
 $ tar -xvf android-studio.tar.gz
 ```
-5. You now have Android Studio installed, all that is left is to configure Projector, making sure to select the port that was chosen as the custom TCP rule for the VM (step 1.6) - here we're using port 8888
+5. You now have Android Studio installed, all that is left is to configure Projector, making sure to select the port that was chosen as the custom TCP rule for the VM (step 1.6) - here we're using port 8888. When asked to use a secure connection, I recommend saying yes to ensure copy pasting functionality works properly.
 ```
 $ projector config add AndroidStudio /path/to/your/android-studio
 Enter a desired Projector port (press ENTER for default) [10005]: 8888
+Use secure connection (this option requires installing a projector's certificate to browser)? [y/n]: y
 ```
 6. This will start Android Studio with Projector on port 8888. Next time you want to start it, you can just run:
 
@@ -91,7 +92,7 @@ $ projector run AndroidStudio
 ### Step 4: Access Android Studio from a Browser
 
 1. On your local machine, start a browser and go to `http://<your_server_ip>:8888`
-2. Click OK on the dialog that shows up
+2. If you've chosen "use secure connection" you'll get a warning saying the certificate is unknown, select proceed anyways
 3. Enjoy your remote Android Studio!
 
 ### Optional: Setup ADB to deploy to / debug a local device
@@ -124,7 +125,57 @@ List of devices attached
 ```
 RemoteForward 5037 localhost:5037
 ```
+### Script to facilitate the entire workflow
 
+This is the home made script I use. It takes care of starting my EC2 instance which I gave a static IP adress to, starting Projector in a tab-less Chrome and stopping the EC2 instance when I exit Chrome. Put this in a bash script, like `work.bash` and run it. The script uses the aws CLI, which you will have to setup beforehand ([documentation](https://aws.amazon.com/cli/)). Make sure to replace the placeholder instance ids with your own.
+
+```
+#!/bin/bash
+INSTANCE_ID=<your_instance_id>
+STATIC_IP=<your_instance_static_ip>
+PORT=8888
+
+echo "Starting Server..."
+aws ec2 start-instances --instance-ids $INSTANCE_ID
+aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+echo "Server Started"
+adb devices
+ssh -o 'ConnectionAttempts 10' remote-builder "/home/admin/.local/bin/projector run AndroidStudio" &
+sleep 5
+echo "Projector started, opening browser..."
+open -W -a "Google Chrome" --args --app="https://$STATIC_IP:8888/?host=$STATIC_IP&port=$PORT"
+echo "Stopping Server..."
+aws ec2 stop-instances --instance-ids $INSTANCE_ID
+aws ec2 wait instance-stopped --instance-ids $INSTANCE_ID
+echo "Done"
+```
+
+If you don't want to give a static IP address to your EC2 instance, you can get the generated IP automatically with the aws CLI, which removes the need for having a `.ssh/config` file altogether. This is what the modified script looks like (Thanks @Clement-Jean for the tip!):
+
+```
+#!/bin/bash
+
+INSTANCE_ID=<your_instance_id>
+PORT=8888
+USER=admin
+REGION=<your_instance_region>
+
+echo "Starting Server..."
+aws ec2 start-instances --instance-ids $INSTANCE_ID
+aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+echo "Server Started"
+IP=`aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[*].Instances[*].PublicIpAddress' --output text`
+EC2_IP=`echo $IP | sed 's/\./-/g'`
+
+adb devices
+ssh -o 'ConnectionAttempts 10' -i <your_pem_file_path> $USER@ec2-$EC2_IP.$REGION.compute.amazonaws.com "/home/$USER/.local/bin/projector run AndroidStudio" &
+sleep 5
+echo "Projector started, opening browser..."
+open -W -a "Google Chrome" --args --app="https://$IP:8888/?host=$IP&port=$PORT"
+aws ec2 stop-instances --instance-ids $INSTANCE_ID
+aws ec2 wait instance-stopped --instance-ids $INSTANCE_ID
+echo "Done"
+```
 
 ### Useful links and other installation methods
 
